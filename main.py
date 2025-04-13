@@ -1,6 +1,5 @@
 from io import BytesIO
 import httpx
-from rich.console import Console
 from starlette.applications import Starlette
 from starlette.config import Config
 from starlette.datastructures import Secret
@@ -9,12 +8,11 @@ from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import Route
 
 config = Config(".env")
-console = Console()
 
 HOST: str = config("HOST", cast=str, default="0.0.0.0")
 PORT: int = config("PORT", cast=int, default=8000)
 DEBUG: bool = config("DEBUG", cast=bool, default=False)
-OPENAI_API_KEY = Secret = config("OPENAI_API_KEY", cast=Secret)
+OPENAI_API_KEY = config("OPENAI_API_KEY", cast=Secret)
 
 
 async def transcribe(data: bytes) -> str:
@@ -38,10 +36,13 @@ async def handle_index(request: Request) -> JSONResponse:
 
 async def handle_transcribe(request: Request) -> PlainTextResponse:
     upload: bytes = await request.body()
-    console.log(f"Received {len(upload)} bytes")
+
+    # Log with simple print if needed
+    print(f"Received {len(upload)} bytes")
 
     transcription = await transcribe(upload)
-    console.log(f'Transcription: "{transcription}"')
+
+    print(f'Transcription: "{transcription}"')
 
     return PlainTextResponse(transcription)
 
