@@ -1,22 +1,30 @@
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from io import BytesIO
+import base64
 import httpx
-from starlette.applications import Starlette
-from starlette.config import Config
-from starlette.datastructures import Secret
-from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse
-from starlette.routing import Route
+import os
 
-config = Config(".env")
+app = FastAPI()
 
-HOST: str = config("HOST", cast=str, default="0.0.0.0")
-PORT: int = config("PORT", cast=int, default=8000)
-DEBUG: bool = config("DEBUG", cast=bool, default=False)
-OPENAI_API_KEY = config("OPENAI_API_KEY", cast=Secret)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-async def transcribe(data: bytes) -> str:
-    file = ("audio.m4a", BytesIO(data), "audio/m4a")
+class TranscribeRequest(BaseModel):
+    audio_base64: str
+
+@app.post("/transcribe")
+async def transcribe_audio(req: TranscribeRequest):
+    audio_data = base64.b64decode(req.audio_base64.split(",")[-1])  # remove metadata if present
+    file = ("audio.m4a", BytesIO(audio_data), "audio/m4a")
 
     async with httpx.AsyncClient() as client:
         r = await client.post(
@@ -25,31 +33,6 @@ async def transcribe(data: bytes) -> str:
             headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
             data={"model": "whisper-1"},
         )
-    transcript = r.json()
-    return transcript["text"]
 
-
-async def handle_index(request: Request) -> JSONResponse:
-    rv = {"hello": "world"}
-    return JSONResponse(rv)
-
-
-async def handle_transcribe(request: Request) -> PlainTextResponse:
-    upload: bytes = await request.body()
-
-    # Log with simple print if needed
-    print(f"Received {len(upload)} bytes")
-
-    transcription = await transcribe(upload)
-
-    print(f'Transcription: "{transcription}"')
-
-    return PlainTextResponse(transcription)
-
-
-routes = [
-    Route("/", handle_index),
-    Route("/transcribe", handle_transcribe, methods=["POST"]),
-]
-
-app = Starlette(routes=routes, debug=DEBUG)
+    result = r.json()
+    return { "transcript": result["text"] }
